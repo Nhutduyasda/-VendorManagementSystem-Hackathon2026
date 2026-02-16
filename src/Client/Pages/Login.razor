@@ -1,0 +1,81 @@
+@page "/login"
+
+<PageTitle>Login - VMS</PageTitle>
+
+<div class="flex items-center justify-center min-h-[80vh]">
+    <div class="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+        <h2 class="text-2xl font-bold text-gray-800 text-center mb-6">Sign In</h2>
+
+        @if (errors.Any())
+        {
+            <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                @foreach (var error in errors)
+                {
+                    <p class="text-sm">@error</p>
+                }
+            </div>
+        }
+
+        <EditForm Model="loginRequest" OnValidSubmit="HandleLogin" FormName="login">
+            <DataAnnotationsValidator />
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <InputText @bind-Value="loginRequest.Email"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="you@example.com" />
+                <ValidationMessage For="@(() => loginRequest.Email)" class="text-red-500 text-sm mt-1" />
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <InputText @bind-Value="loginRequest.Password" type="password"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="••••••••" />
+                <ValidationMessage For="@(() => loginRequest.Password)" class="text-red-500 text-sm mt-1" />
+            </div>
+
+            <div class="mb-6 flex items-center">
+                <InputCheckbox @bind-Value="loginRequest.RememberMe" class="h-4 w-4 text-blue-600 rounded" />
+                <label class="ml-2 text-sm text-gray-600">Remember me</label>
+            </div>
+
+            <button type="submit" disabled="@isLoading"
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 font-medium">
+                @(isLoading ? "Signing in..." : "Sign In")
+            </button>
+        </EditForm>
+
+        <p class="text-center text-sm text-gray-600 mt-4">
+            Don't have an account? <a href="/register" class="text-blue-600 hover:underline">Register</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    [Inject] private IAuthClientService AuthService { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private LoginRequest loginRequest = new();
+    private List<string> errors = [];
+    private bool isLoading;
+
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+        errors.Clear();
+
+        var result = await AuthService.LoginAsync(loginRequest);
+
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo("/");
+        }
+        else
+        {
+            errors = result.Errors.ToList();
+        }
+
+        isLoading = false;
+    }
+}

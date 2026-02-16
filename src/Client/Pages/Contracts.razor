@@ -1,0 +1,87 @@
+@page "/contracts"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Contracts - VMS</PageTitle>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800">Contracts</h1>
+        <AuthorizeView Roles="Admin,Manager">
+            <a href="/contracts/create" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium text-sm">
+                + Add Contract
+            </a>
+        </AuthorizeView>
+    </div>
+
+    <div class="bg-white rounded-lg shadow">
+        @if (isLoading)
+        {
+            <div class="p-8 text-center text-gray-500">Loading contracts...</div>
+        }
+        else if (contracts?.Items.Any() == true)
+        {
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contract #</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Period</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        @foreach (var contract in contracts.Items)
+                        {
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium text-gray-900">@contract.ContractNumber</td>
+                                <td class="px-6 py-4 text-gray-600">@contract.SupplierName</td>
+                                <td class="px-6 py-4 text-gray-600 text-sm">
+                                    @contract.SignDate.ToString("MMM dd, yyyy") — @contract.ExpiryDate.ToString("MMM dd, yyyy")
+                                </td>
+                                <td class="px-6 py-4 text-gray-900 font-medium">@contract.Value.ToString("C")</td>
+                                <td class="px-6 py-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full @GetStatusColor(contract.Status)">
+                                        @contract.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="p-8 text-center text-gray-500">No contracts found.</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject] private HttpClient Http { get; set; } = default!;
+
+    private PagedResult<ContractDto>? contracts;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await Http.GetFromJsonAsync<ApiResponse<PagedResult<ContractDto>>>("api/contracts");
+            contracts = response?.Data;
+        }
+        catch { }
+        isLoading = false;
+    }
+
+    private static string GetStatusColor(ContractStatus status) => status switch
+    {
+        ContractStatus.Active => "bg-green-100 text-green-800",
+        ContractStatus.Expired => "bg-red-100 text-red-800",
+        ContractStatus.Terminated => "bg-red-100 text-red-600",
+        _ => "bg-gray-100 text-gray-600"
+    };
+}

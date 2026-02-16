@@ -1,0 +1,53 @@
+﻿<nav class="mt-4 space-y-1 px-2">
+    <NavLink href="" Match="NavLinkMatch.All"
+             class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+             ActiveClass="bg-gray-700 text-white">
+        Dashboard
+    </NavLink>
+
+    <AuthorizeView>
+        <Authorized>
+            <NavLink href="vendors"
+                     class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+                     ActiveClass="bg-gray-700 text-white">
+                Vendors
+            </NavLink>
+
+            <NavLink href="contracts"
+                     class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+                     ActiveClass="bg-gray-700 text-white">
+                Contracts
+            </NavLink>
+
+            <NavLink href="notifications"
+                     class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+                     ActiveClass="bg-gray-700 text-white">
+                Notifications
+            </NavLink>
+
+            <button @onclick="Logout"
+                    class="w-full text-left flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white mt-4 border-t border-gray-700 pt-4">
+                Logout
+            </button>
+        </Authorized>
+
+        <NotAuthorized>
+            <NavLink href="login"
+                     class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+                     ActiveClass="bg-gray-700 text-white">
+                Login
+            </NavLink>
+        </NotAuthorized>
+    </AuthorizeView>
+</nav>
+
+@code {
+    [Inject] private IAuthClientService AuthService { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private async Task Logout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}

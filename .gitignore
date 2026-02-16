@@ -1,0 +1,46 @@
+## .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.dll
+*.exe
+*.pdb
+
+## Node
+node_modules/
+npm-debug.log*
+dist/
+.cache/
+
+## VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+## Environment & Secrets
+appsettings.Development.json
+appsettings.Production.json
+*.env
+*.env.local
+secrets.json
+
+## Logs
+*.log
+
+## Database
+*.db
+*.db-shm
+*.db-wal
+
+## Others
+.DS_Store
+Thumbs.db

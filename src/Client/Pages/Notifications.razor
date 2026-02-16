@@ -1,0 +1,117 @@
+@page "/notifications"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@implements IAsyncDisposable
+
+<PageTitle>Notifications - VMS</PageTitle>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800">Notifications</h1>
+        <button @onclick="MarkAllRead"
+                class="text-sm text-blue-600 hover:underline">
+            Mark all as read
+        </button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow divide-y divide-gray-200">
+        @if (notifications.Any())
+        {
+            @foreach (var notification in notifications)
+            {
+                <div class="p-4 flex items-start gap-3 @(notification.IsRead ? "opacity-60" : "")">
+                    <div class="w-2 h-2 mt-2 rounded-full flex-shrink-0 @GetDotColor(notification.Type)"></div>
+                    <div class="flex-1">
+                        <p class="text-gray-900 text-sm">@notification.Message</p>
+                        <p class="text-gray-400 text-xs mt-1">@notification.CreatedAt.ToString("MMM dd, yyyy HH:mm")</p>
+                    </div>
+                    @if (!notification.IsRead)
+                    {
+                        <button @onclick="() => MarkRead(notification.Id)"
+                                class="text-xs text-blue-500 hover:underline flex-shrink-0">
+                            Mark read
+                        </button>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <div class="p-8 text-center text-gray-500">No notifications.</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private IAuthClientService AuthService { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private List<NotificationDto> notifications = [];
+    private Microsoft.AspNetCore.SignalR.Client.HubConnection? hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNotifications();
+        await ConnectToHub();
+    }
+
+    private async Task LoadNotifications()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<ApiResponse<IEnumerable<NotificationDto>>>("api/notifications");
+            if (response?.Data != null)
+                notifications = response.Data.ToList();
+        }
+        catch { }
+    }
+
+    private async Task ConnectToHub()
+    {
+        var token = await AuthService.GetTokenAsync();
+        if (string.IsNullOrEmpty(token)) return;
+
+        hubConnection = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/hubs/notifications"), options =>
+            {
+                options.AccessTokenProvider = () => Task.FromResult<string?>(token);
+            })
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On("ReceiveNotification", (NotificationDto notification) =>
+        {
+            notifications.Insert(0, notification);
+            InvokeAsync(StateHasChanged);
+        });
+
+        try { await hubConnection.StartAsync(); } catch { }
+    }
+
+    private async Task MarkRead(int id)
+    {
+        await Http.PostAsync($"api/notifications/{id}/read", null);
+        var n = notifications.FirstOrDefault(x => x.Id == id);
+        if (n != null) n.IsRead = true;
+    }
+
+    private async Task MarkAllRead()
+    {
+        await Http.PostAsync("api/notifications/read-all", null);
+        foreach (var n in notifications) n.IsRead = true;
+    }
+
+    private static string GetDotColor(NotificationType type) => type switch
+    {
+        NotificationType.Success => "bg-green-500",
+        NotificationType.Warning => "bg-yellow-500",
+        NotificationType.Error => "bg-red-500",
+        _ => "bg-blue-500"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection != null)
+            await hubConnection.DisposeAsync();
+    }
+}
