@@ -71,7 +71,7 @@ public static class DataSeeder
             db.ApprovalRules.AddRange(
                 new ApprovalRule { RoleName = "Staff", MaxAmount = 10_000_000m },
                 new ApprovalRule { RoleName = "Manager", MaxAmount = 100_000_000m },
-                new ApprovalRule { RoleName = "Admin", MaxAmount = decimal.MaxValue }
+                new ApprovalRule { RoleName = "Admin", MaxAmount = 9_999_999_999_999_999.99m }
             );
             await db.SaveChangesAsync();
         }

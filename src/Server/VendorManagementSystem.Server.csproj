@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Client\VendorManagementSystem.Client.csproj" />
     <ProjectReference Include="..\Shared\VendorManagementSystem.Shared.csproj" />
   </ItemGroup>
 
