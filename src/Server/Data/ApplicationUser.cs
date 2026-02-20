@@ -21,6 +21,12 @@ public class ApplicationUser : IdentityUser
 
     public bool IsActive { get; set; } = true;
 
-    // Navigation
+    public string? RefreshToken { get; set; }
+
+    public DateTime? RefreshTokenExpiryTime { get; set; }
+
+    public int? SupplierId { get; set; }
+    public virtual Supplier? Supplier { get; set; }
+
     public ICollection<Notification> Notifications { get; set; } = [];
 }

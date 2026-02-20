@@ -1,0 +1,454 @@
+@page "/vendors"
+@page "/suppliers"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Suppliers - VMS</PageTitle>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800">Suppliers</h1>
+        <AuthorizeView Roles="Admin,Manager">
+            <Authorized Context="headerCtx">
+                <div class="flex gap-2">
+                    <button @onclick="OpenCreateForm"
+                            class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium text-sm">
+                        + Add Supplier
+                    </button>
+                    <label class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 font-medium text-sm cursor-pointer">
+                        Import Excel
+                        <InputFile OnChange="HandleImport" accept=".xlsx" class="hidden" />
+                    </label>
+                    <button @onclick="ExportExcel"
+                            class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 font-medium text-sm">
+                        Export Excel
+                    </button>
+                    <a href="/price-comparison"
+                       class="bg-amber-600 text-white px-4 py-2 rounded-md hover:bg-amber-700 font-medium text-sm">
+                        Price Compare
+                    </a>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+    </div>
+
+    @if (!string.IsNullOrEmpty(importMessage))
+    {
+        <div class="p-3 rounded-md text-sm @(importSuccess ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
+            @importMessage
+        </div>
+    }
+
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 flex flex-col md:flex-row gap-3">
+            <input type="text" @bind="searchTerm" @bind:event="oninput" @onkeyup="OnSearchChanged"
+                   placeholder="Search suppliers..."
+                   class="w-full md:w-80 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+            <select @bind="statusFilter" @bind:after="OnFilterChanged"
+                    class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">All Statuses</option>
+                @foreach (var s in Enum.GetValues<SupplierStatus>())
+                {
+                    <option value="@s">@s</option>
+                }
+            </select>
+
+            <select @bind="rankFilter" @bind:after="OnFilterChanged"
+                    class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">All Ranks</option>
+                @foreach (var r in Enum.GetValues<SupplierRank>())
+                {
+                    <option value="@r">@r</option>
+                }
+            </select>
+
+            <select @bind="blacklistFilter" @bind:after="OnFilterChanged"
+                    class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">All</option>
+                <option value="false">Active Only</option>
+                <option value="true">Blacklisted</option>
+            </select>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="p-8 text-center text-gray-500">Loading suppliers...</div>
+        }
+        else if (suppliers?.Items.Any() == true)
+        {
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Logo</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Products</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        @foreach (var supplier in suppliers.Items)
+                        {
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4">
+                                    @if (!string.IsNullOrEmpty(supplier.LogoUrl))
+                                    {
+                                        <img src="@supplier.LogoUrl" alt="@supplier.Name" class="w-10 h-10 rounded-full object-cover" />
+                                    }
+                                    else
+                                    {
+                                        <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
+                                            @supplier.Name[0]
+                                        </div>
+                                    }
+                                </td>
+                                <td class="px-6 py-4">
+                                    <a href="/suppliers/@supplier.Id" class="font-medium text-blue-600 hover:text-blue-800">
+                                        @supplier.Name
+                                    </a>
+                                    @if (supplier.IsBlacklisted)
+                                    {
+                                        <span class="ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-800">Blacklisted</span>
+                                    }
+                                </td>
+                                <td class="px-6 py-4 text-gray-600">@supplier.ContactPerson</td>
+                                <td class="px-6 py-4 text-gray-600">@supplier.Email</td>
+                                <td class="px-6 py-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full @GetStatusColor(supplier.Status)">
+                                        @supplier.Status
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full @GetRankColor(supplier.Rank)">
+                                        @supplier.Rank
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 text-gray-600">
+                                    @if (supplier.AverageRating.HasValue)
+                                    {
+                                        <span class="text-amber-500 font-medium">@supplier.AverageRating.Value.ToString("F1") ★</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-gray-400">—</span>
+                                    }
+                                </td>
+                                <td class="px-6 py-4 text-gray-600">@supplier.ProductCount</td>
+                                <td class="px-6 py-4">
+                                    <AuthorizeView Roles="Admin,Manager" Context="actionCtx">
+                                        <div class="flex gap-2">
+                                            <button @onclick="() => OpenEditForm(supplier)"
+                                                    class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                                Edit
+                                            </button>
+                                            @if (!supplier.IsBlacklisted)
+                                            {
+                                                <button @onclick="() => OpenBlacklistModal(supplier)"
+                                                        class="text-orange-600 hover:text-orange-800 text-sm font-medium">
+                                                    Blacklist
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button @onclick="() => HandleUnblacklist(supplier.Id)"
+                                                        class="text-green-600 hover:text-green-800 text-sm font-medium">
+                                                    Unblacklist
+                                                </button>
+                                            }
+                                            <button @onclick="() => HandleDelete(supplier.Id)"
+                                                    class="text-red-600 hover:text-red-800 text-sm font-medium">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <Pagination
+                CurrentPage="currentPage"
+                TotalPages="suppliers.TotalPages"
+                PageSize="pageSize"
+                TotalCount="suppliers.TotalCount"
+                OnPageChanged="OnPageChanged"
+                OnPageSizeChanged="OnPageSizeChanged" />
+        }
+        else
+        {
+            <div class="p-8 text-center text-gray-500">No suppliers found.</div>
+        }
+    </div>
+</div>
+
+@if (showForm)
+{
+    <SupplierForm IsEdit="isEditing"
+                  Supplier="formModel"
+                  SupplierId="editingId"
+                  OnSave="HandleSave"
+                  OnCancel="CloseForm"
+                  ErrorMessage="@formError" />
+}
+
+@if (showBlacklistModal)
+{
+    <BlacklistModal SupplierName="@blacklistTargetName"
+                    OnConfirm="HandleBlacklist"
+                    OnCancel="CloseBlacklistModal" />
+}
+
+@code {
+    [Inject] private ISupplierService SupplierService { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private SupplierListResponse? suppliers;
+    private bool isLoading = true;
+    private string searchTerm = string.Empty;
+    private string statusFilter = string.Empty;
+    private string rankFilter = string.Empty;
+    private string blacklistFilter = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 10;
+
+    private bool showForm;
+    private bool isEditing;
+    private int editingId;
+    private CreateSupplierRequest formModel = new();
+    private string? formError;
+
+    private bool showBlacklistModal;
+    private int blacklistTargetId;
+    private string blacklistTargetName = string.Empty;
+
+    private string? importMessage;
+    private bool importSuccess;
+
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSuppliers();
+    }
+
+    private async Task LoadSuppliers()
+    {
+        isLoading = true;
+        SupplierStatus? status = Enum.TryParse<SupplierStatus>(statusFilter, out var s) ? s : null;
+        SupplierRank? rank = Enum.TryParse<SupplierRank>(rankFilter, out var r) ? r : null;
+        bool? blacklisted = bool.TryParse(blacklistFilter, out var b) ? b : null;
+
+        suppliers = await SupplierService.GetSuppliersAsync(currentPage, pageSize, searchTerm, status, rank, blacklisted);
+        isLoading = false;
+    }
+
+    private void OnSearchChanged()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer?.Stop();
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadSuppliers();
+                StateHasChanged();
+            });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private async Task OnFilterChanged()
+    {
+        currentPage = 1;
+        await LoadSuppliers();
+    }
+
+    private async Task OnPageChanged(int pg)
+    {
+        currentPage = pg;
+        await LoadSuppliers();
+    }
+
+    private async Task OnPageSizeChanged(int size)
+    {
+        pageSize = size;
+        currentPage = 1;
+        await LoadSuppliers();
+    }
+
+    private void OpenCreateForm()
+    {
+        isEditing = false;
+        editingId = 0;
+        formModel = new CreateSupplierRequest();
+        formError = null;
+        showForm = true;
+    }
+
+    private void OpenEditForm(SupplierDto supplier)
+    {
+        isEditing = true;
+        editingId = supplier.Id;
+        formModel = new CreateSupplierRequest
+        {
+            Name = supplier.Name,
+            TaxCode = supplier.TaxCode,
+            Address = supplier.Address,
+            Phone = supplier.Phone,
+            Email = supplier.Email,
+            ContactPerson = supplier.ContactPerson
+        };
+        formError = null;
+        showForm = true;
+    }
+
+    private async Task HandleSave(CreateSupplierRequest model)
+    {
+        formError = null;
+
+        if (isEditing)
+        {
+            var existing = suppliers?.Items.FirstOrDefault(s => s.Id == editingId);
+            var updateReq = new UpdateSupplierRequest
+            {
+                Id = editingId,
+                Name = model.Name,
+                TaxCode = model.TaxCode,
+                Address = model.Address,
+                Phone = model.Phone,
+                Email = model.Email,
+                ContactPerson = model.ContactPerson,
+                Status = existing?.Status ?? SupplierStatus.Pending,
+                Rank = existing?.Rank ?? SupplierRank.Unranked,
+                IsBlacklisted = existing?.IsBlacklisted ?? false,
+                BlacklistReason = existing?.BlacklistReason
+            };
+            var result = await SupplierService.UpdateAsync(editingId, updateReq);
+            if (result?.Success != true)
+            {
+                formError = result?.Message ?? "Failed to update supplier";
+                return;
+            }
+        }
+        else
+        {
+            var result = await SupplierService.CreateAsync(model);
+            if (result?.Success != true)
+            {
+                formError = result?.Message ?? "Failed to create supplier";
+                return;
+            }
+        }
+
+        showForm = false;
+        await LoadSuppliers();
+    }
+
+    private void CloseForm()
+    {
+        showForm = false;
+        formError = null;
+    }
+
+    private void OpenBlacklistModal(SupplierDto supplier)
+    {
+        blacklistTargetId = supplier.Id;
+        blacklistTargetName = supplier.Name;
+        showBlacklistModal = true;
+    }
+
+    private async Task HandleBlacklist(string reason)
+    {
+        await SupplierService.BlacklistAsync(blacklistTargetId, new BlacklistRequest { Reason = reason });
+        showBlacklistModal = false;
+        await LoadSuppliers();
+    }
+
+    private void CloseBlacklistModal()
+    {
+        showBlacklistModal = false;
+    }
+
+    private async Task HandleUnblacklist(int id)
+    {
+        await SupplierService.UnblacklistAsync(id);
+        await LoadSuppliers();
+    }
+
+    private async Task HandleDelete(int id)
+    {
+        await SupplierService.DeleteAsync(id);
+        await LoadSuppliers();
+    }
+
+    private async Task HandleImport(InputFileChangeEventArgs e)
+    {
+        importMessage = null;
+        try
+        {
+            var maxSize = 10 * 1024 * 1024;
+            using var stream = e.File.OpenReadStream(maxSize);
+            var result = await SupplierService.ImportFromExcelAsync(stream, e.File.Name);
+            if (result?.Success == true)
+            {
+                importSuccess = true;
+                importMessage = result.Message ?? $"{result.Data?.Count ?? 0} suppliers imported";
+                await LoadSuppliers();
+            }
+            else
+            {
+                importSuccess = false;
+                importMessage = result?.Message ?? "Import failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            importSuccess = false;
+            importMessage = ex.Message;
+        }
+    }
+
+    private async Task ExportExcel()
+    {
+        SupplierStatus? status = Enum.TryParse<SupplierStatus>(statusFilter, out var s) ? s : null;
+        var bytes = await SupplierService.ExportToExcelAsync(searchTerm, status);
+        if (bytes != null)
+        {
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("eval",
+                $"{{const a=document.createElement('a');a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{base64}';a.download='Suppliers.xlsx';a.click();}}");
+        }
+    }
+
+    private static string GetStatusColor(SupplierStatus status) => status switch
+    {
+        SupplierStatus.Active => "bg-green-100 text-green-800",
+        SupplierStatus.Approved => "bg-blue-100 text-blue-800",
+        SupplierStatus.Pending => "bg-yellow-100 text-yellow-800",
+        SupplierStatus.Suspended => "bg-red-100 text-red-800",
+        SupplierStatus.Inactive => "bg-gray-100 text-gray-800",
+        _ => "bg-gray-100 text-gray-600"
+    };
+
+    private static string GetRankColor(SupplierRank rank) => rank switch
+    {
+        SupplierRank.Platinum => "bg-purple-100 text-purple-800",
+        SupplierRank.Gold => "bg-yellow-100 text-yellow-800",
+        SupplierRank.Silver => "bg-gray-200 text-gray-700",
+        SupplierRank.Bronze => "bg-orange-100 text-orange-800",
+        SupplierRank.Unranked => "bg-gray-100 text-gray-500",
+        _ => "bg-gray-100 text-gray-600"
+    };
+}

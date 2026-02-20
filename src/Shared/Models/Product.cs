@@ -29,7 +29,8 @@ public class Product
 
     public int CurrentStock { get; set; }
 
-    // Navigation
+    public bool IsActive { get; set; } = true;
+
     public Category Category { get; set; } = null!;
     public ICollection<SupplierProduct> SupplierProducts { get; set; } = [];
     public ICollection<PurchaseOrderItem> PurchaseOrderItems { get; set; } = [];

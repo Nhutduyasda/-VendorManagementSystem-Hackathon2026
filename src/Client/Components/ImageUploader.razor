@@ -1,0 +1,179 @@
+@using System.IO
+@using Microsoft.AspNetCore.Components.Forms
+
+<div class="w-full">
+    <label class="block text-sm font-medium text-gray-700 mb-2">@Label</label>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-md text-sm border border-red-200">
+            @_error
+        </div>
+    }
+
+    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 @(_isDragOver ? "border-blue-500 bg-blue-50" : "border-gray-300 border-dashed") rounded-md hover:bg-gray-50 transition-colors relative"
+         @ondragenter="@(() => _isDragOver = true)"
+         @ondragleave="@(() => _isDragOver = false)"
+         @ondrop="@(() => _isDragOver = false)">
+         
+        <InputFile OnChange="HandleFileSelected" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" accept="@AcceptTypes" />
+
+        <div class="space-y-1 text-center">
+            @if (_isUploading)
+            {
+                 <div class="flex flex-col items-center justify-center py-4">
+                    <svg class="animate-spin h-8 w-8 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p class="text-sm text-gray-500">Uploading...</p>
+                 </div>
+            }
+            else if (!string.IsNullOrEmpty(_previewUrl) || !string.IsNullOrEmpty(CurrentImageUrl))
+            {
+                <div class="relative inline-block group mb-2">
+                    <img src="@(_previewUrl ?? CurrentImageUrl)" alt="Preview" class="w-[150px] h-[150px] object-cover rounded-lg shadow-md border border-gray-200" />
+                    
+                    <button type="button" @onclick="RemoveImage" @onclick:preventDefault class="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-md transition-colors z-20" title="Remove image">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+                
+                @if (_selectedFile != null && ShowUploadButton)
+                {
+                    <div class="mt-2 z-20 relative">
+                         <button type="button" @onclick="UploadFile" @onclick:preventDefault class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-colors w-full">
+                            Upload
+                        </button>
+                    </div>
+                }
+            }
+            else
+            {
+                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <div class="flex text-sm text-gray-600 justify-center">
+                    <span class="font-medium text-blue-600 hover:text-blue-500">Upload a file</span>
+                    <p class="pl-1">or drag and drop</p>
+                </div>
+                <p class="text-xs text-gray-500">PNG, JPG, GIF up to @(MaxSizeMB)MB</p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Image";
+    [Parameter] public string? CurrentImageUrl { get; set; }
+    [Parameter] public EventCallback<string> OnImageUploaded { get; set; }
+    [Parameter] public int MaxSizeMB { get; set; } = 5;
+    [Parameter] public string AcceptTypes { get; set; } = "image/*";
+    [Parameter] public Func<IBrowserFile, Task<string>>? UploadAction { get; set; }
+
+    [Parameter] public EventCallback<IBrowserFile> OnFileSelected { get; set; }
+    [Parameter] public bool ShowUploadButton { get; set; } = true;
+
+    private IBrowserFile? _selectedFile;
+    private string? _previewUrl;
+    private bool _isUploading;
+    private string? _error;
+    private bool _isDragOver;
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        try
+        {
+            var file = e.File;
+            if (file == null) return;
+
+            // Size validation
+            if (file.Size > MaxSizeMB * 1024 * 1024)
+            {
+                _error = $"File size exceeds {MaxSizeMB}MB limit.";
+                return;
+            }
+
+            // Type validation
+            if (!string.IsNullOrEmpty(AcceptTypes) && AcceptTypes != "*")
+            {
+                 if (!file.ContentType.StartsWith("image/"))
+                 {
+                     _error = "Invalid file type. Please select an image.";
+                     return;
+                 }
+            }
+
+            _selectedFile = file;
+            await OnFileSelected.InvokeAsync(file);
+
+            // Generate preview
+            var resizedFile = await file.RequestImageFileAsync(file.ContentType, 300, 300);
+            using var stream = resizedFile.OpenReadStream(MaxSizeMB * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            _previewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error reading file: {ex.Message}";
+            _selectedFile = null;
+        }
+    }
+
+    private async Task UploadFile()
+    {
+        if (_selectedFile == null) return;
+        if (UploadAction == null)
+        {
+            _error = "Upload action not configured.";
+            return;
+        }
+
+        _isUploading = true;
+        _error = null;
+
+        try
+        {
+            var url = await UploadAction(_selectedFile);
+            
+            if (!string.IsNullOrEmpty(url))
+            {
+                await OnImageUploaded.InvokeAsync(url);
+                _selectedFile = null;
+                _previewUrl = null;
+                // We don't reset CurrentImageUrl here, we expect the parent to update it via the callback if they want to reflect the change immediately
+            }
+            else
+            {
+                 _error = "Upload failed. Server returned no URL.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    private async Task RemoveImage()
+    {
+        if (_selectedFile != null)
+        {
+            // Just clear the selection
+            _selectedFile = null;
+            _previewUrl = null;
+        }
+        else if (!string.IsNullOrEmpty(CurrentImageUrl))
+        {
+            // Clear the existing image
+            await OnImageUploaded.InvokeAsync(string.Empty);
+        }
+    }
+}

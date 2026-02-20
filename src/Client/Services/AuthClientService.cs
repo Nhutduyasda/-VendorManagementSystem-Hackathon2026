@@ -20,7 +20,8 @@ public class AuthClientService : IAuthClientService
     private readonly IJSRuntime _js;
     private readonly AuthenticationStateProvider _authStateProvider;
 
-    private const string TokenKey = "auth_token";
+    private const string TokenKey = "authToken";
+    private const string RefreshTokenKey = "refreshToken";
 
     public AuthClientService(HttpClient http, IJSRuntime js, AuthenticationStateProvider authStateProvider)
     {
@@ -36,10 +37,9 @@ public class AuthClientService : IAuthClientService
 
         if (result?.Success == true && result.Data?.Token != null)
         {
-            await _js.InvokeVoidAsync("localStorage.setItem", TokenKey, result.Data.Token);
+            await StoreTokens(result.Data);
             ((JwtAuthStateProvider)_authStateProvider).NotifyUserAuthentication(result.Data.Token);
-            _http.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", result.Data.Token);
+            SetAuthHeader(result.Data.Token);
         }
 
         return result?.Data ?? new AuthResponse { Errors = ["Login failed"] };
@@ -52,10 +52,9 @@ public class AuthClientService : IAuthClientService
 
         if (result?.Success == true && result.Data?.Token != null)
         {
-            await _js.InvokeVoidAsync("localStorage.setItem", TokenKey, result.Data.Token);
+            await StoreTokens(result.Data);
             ((JwtAuthStateProvider)_authStateProvider).NotifyUserAuthentication(result.Data.Token);
-            _http.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", result.Data.Token);
+            SetAuthHeader(result.Data.Token);
         }
 
         return result?.Data ?? new AuthResponse { Errors = ["Registration failed"] };
@@ -63,13 +62,62 @@ public class AuthClientService : IAuthClientService
 
     public async Task LogoutAsync()
     {
+        try
+        {
+            var token = await GetTokenAsync();
+            if (!string.IsNullOrEmpty(token))
+            {
+                SetAuthHeader(token);
+                await _http.PostAsync("api/auth/logout", null);
+            }
+        }
+        catch { }
+
         await _js.InvokeVoidAsync("localStorage.removeItem", TokenKey);
+        await _js.InvokeVoidAsync("localStorage.removeItem", RefreshTokenKey);
         ((JwtAuthStateProvider)_authStateProvider).NotifyUserLogout();
         _http.DefaultRequestHeaders.Authorization = null;
     }
 
     public async Task<string?> GetTokenAsync()
     {
-        return await _js.InvokeAsync<string?>("localStorage.getItem", TokenKey);
+        var token = await _js.InvokeAsync<string?>("localStorage.getItem", TokenKey);
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
+        if (!JwtAuthStateProvider.IsTokenExpired(token))
+            return token;
+
+        var refreshToken = await _js.InvokeAsync<string?>("localStorage.getItem", RefreshTokenKey);
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            return null;
+
+        var refreshRequest = new RefreshTokenRequest { Token = token, RefreshToken = refreshToken };
+        var response = await _http.PostAsJsonAsync("api/auth/refresh-token", refreshRequest);
+        var result = await response.Content.ReadFromJsonAsync<ApiResponse<AuthResponse>>();
+
+        if (result?.Success == true && result.Data?.Token != null)
+        {
+            await StoreTokens(result.Data);
+            ((JwtAuthStateProvider)_authStateProvider).NotifyUserAuthentication(result.Data.Token);
+            SetAuthHeader(result.Data.Token);
+            return result.Data.Token;
+        }
+
+        await LogoutAsync();
+        return null;
+    }
+
+    private async Task StoreTokens(AuthResponse authResponse)
+    {
+        await _js.InvokeVoidAsync("localStorage.setItem", TokenKey, authResponse.Token);
+        if (!string.IsNullOrEmpty(authResponse.RefreshToken))
+            await _js.InvokeVoidAsync("localStorage.setItem", RefreshTokenKey, authResponse.RefreshToken);
+    }
+
+    private void SetAuthHeader(string token)
+    {
+        _http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
     }
 }

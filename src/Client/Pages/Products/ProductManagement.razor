@@ -1,0 +1,292 @@
+@page "/products"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Products - VMS</PageTitle>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800">Products</h1>
+        <AuthorizeView Roles="Admin,Manager">
+            <div class="flex gap-2">
+                <button @onclick="OpenCreateForm"
+                        class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium text-sm">
+                    + Add Product
+                </button>
+            </div>
+        </AuthorizeView>
+    </div>
+
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 flex flex-col md:flex-row gap-3">
+            <input type="text" @bind="searchTerm" @bind:event="oninput" @onkeyup="OnSearchChanged"
+                   placeholder="Search products..."
+                   class="w-full md:w-80 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+            <select @bind="categoryFilter" @bind:after="OnCategoryFilterChanged"
+                    class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="0">All Categories</option>
+                @foreach (var cat in categories)
+                {
+                    <option value="@cat.Id">@cat.Name</option>
+                }
+            </select>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="p-8 text-center text-gray-500">Loading products...</div>
+        }
+        else if (products?.Items.Any() == true)
+        {
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Image</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        @foreach (var product in products.Items)
+                        {
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4">
+                                    @if (!string.IsNullOrEmpty(product.ImageUrl))
+                                    {
+                                        <img src="@product.ImageUrl" alt="@product.Name" class="w-10 h-10 rounded object-cover" />
+                                    }
+                                    else
+                                    {
+                                        <div class="w-10 h-10 rounded bg-gray-200 flex items-center justify-center text-gray-400 text-xs">
+                                            N/A
+                                        </div>
+                                    }
+                                </td>
+                                <td class="px-6 py-4 text-gray-500 font-mono text-sm">@product.SKU</td>
+                                <td class="px-6 py-4 font-medium text-gray-900">@product.Name</td>
+                                <td class="px-6 py-4 text-gray-600">@product.CategoryName</td>
+                                <td class="px-6 py-4 text-gray-600">@(product.Unit ?? "—")</td>
+                                <td class="px-6 py-4">
+                                    <span class="@GetStockColor(product)">
+                                        @product.CurrentStock / @product.MaxStock
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full @(product.IsActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
+                                        @(product.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <AuthorizeView Roles="Admin,Manager" Context="actionContext">
+                                        <div class="flex gap-2">
+                                            <button @onclick="() => OpenEditForm(product)"
+                                                    class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                                Edit
+                                            </button>
+                                            <button @onclick="() => DeleteProduct(product)"
+                                                    class="text-red-600 hover:text-red-800 text-sm font-medium">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <Pagination
+                CurrentPage="currentPage"
+                TotalPages="products.TotalPages"
+                PageSize="pageSize"
+                TotalCount="products.TotalCount"
+                OnPageChanged="OnPageChanged"
+                OnPageSizeChanged="OnPageSizeChanged" />
+        }
+        else
+        {
+            <div class="p-8 text-center text-gray-500">No products found.</div>
+        }
+    </div>
+</div>
+
+@if (showForm)
+{
+    <ProductForm IsEdit="isEditing"
+                 Product="formModel"
+                 ProductId="editingId"
+                 ImageUrl="@formModel.ImageUrl"
+                 Categories="categories"
+                 OnSave="HandleSave"
+                 OnCancel="CloseForm"
+                 ErrorMessage="@formError" />
+}
+
+@code {
+    [Inject] private IProductService ProductService { get; set; } = default!;
+    [Inject] private ICategoryService CategoryService { get; set; } = default!;
+
+    private ProductListResponse? products;
+    private List<CategoryDto> categories = [];
+    private bool isLoading = true;
+    private string searchTerm = string.Empty;
+    private int categoryFilter;
+    private int currentPage = 1;
+    private int pageSize = 10;
+
+    private bool showForm;
+    private bool isEditing;
+    private int editingId;
+    private CreateProductRequest formModel = new();
+    private string? formError;
+
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = await CategoryService.GetCategoriesAsync();
+        await LoadProducts();
+    }
+
+    private async Task LoadProducts()
+    {
+        isLoading = true;
+        int? catId = categoryFilter > 0 ? categoryFilter : null;
+        products = await ProductService.GetProductsAsync(currentPage, pageSize, searchTerm, catId);
+        isLoading = false;
+    }
+
+    private void OnSearchChanged()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer?.Stop();
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadProducts();
+                StateHasChanged();
+            });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private async Task OnCategoryFilterChanged()
+    {
+        currentPage = 1;
+        await LoadProducts();
+    }
+
+    private async Task OnPageChanged(int pg)
+    {
+        currentPage = pg;
+        await LoadProducts();
+    }
+
+    private async Task OnPageSizeChanged(int size)
+    {
+        pageSize = size;
+        currentPage = 1;
+        await LoadProducts();
+    }
+
+    private void OpenCreateForm()
+    {
+        isEditing = false;
+        editingId = 0;
+        formModel = new CreateProductRequest();
+        formError = null;
+        showForm = true;
+    }
+
+    private void OpenEditForm(ProductDto product)
+    {
+        isEditing = true;
+        editingId = product.Id;
+        formModel = new CreateProductRequest
+        {
+            SKU = product.SKU,
+            Name = product.Name,
+            CategoryId = product.CategoryId,
+            Unit = product.Unit,
+            Description = product.Description,
+            MinStock = product.MinStock,
+            MaxStock = product.MaxStock,
+            CurrentStock = product.CurrentStock,
+            ImageUrl = product.ImageUrl
+        };
+        formError = null;
+        showForm = true;
+    }
+
+    private async Task HandleSave(CreateProductRequest model)
+    {
+        formError = null;
+
+        if (isEditing)
+        {
+            var updateReq = new UpdateProductRequest
+            {
+                Id = editingId,
+                SKU = model.SKU,
+                Name = model.Name,
+                CategoryId = model.CategoryId,
+                Unit = model.Unit,
+                Description = model.Description,
+                MinStock = model.MinStock,
+                MaxStock = model.MaxStock,
+                CurrentStock = model.CurrentStock
+            };
+            var result = await ProductService.UpdateProductAsync(editingId, updateReq);
+            if (result?.Success != true)
+            {
+                formError = result?.Message ?? "Failed to update product";
+                return;
+            }
+        }
+        else
+        {
+            var result = await ProductService.CreateProductAsync(model);
+            if (result?.Success != true)
+            {
+                formError = result?.Message ?? "Failed to create product";
+                return;
+            }
+        }
+
+        showForm = false;
+        await LoadProducts();
+    }
+
+    private void CloseForm()
+    {
+        showForm = false;
+        formError = null;
+    }
+
+    private async Task DeleteProduct(ProductDto product)
+    {
+        await ProductService.DeleteProductAsync(product.Id);
+        await LoadProducts();
+    }
+
+    private string GetStockColor(ProductDto product)
+    {
+        if (product.CurrentStock <= product.MinStock)
+            return "text-red-600 font-medium";
+        if (product.CurrentStock >= product.MaxStock)
+            return "text-green-600 font-medium";
+        return "text-gray-700";
+    }
+}

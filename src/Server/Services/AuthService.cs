@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -13,6 +15,8 @@ public interface IAuthService
 {
     Task<AuthResponse> LoginAsync(LoginRequest request);
     Task<AuthResponse> RegisterAsync(RegisterRequest request);
+    Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request);
+    Task<bool> ValidateTokenAsync(string token);
     Task<UserInfo?> GetUserInfoAsync(string userId);
 }
 
@@ -44,48 +48,121 @@ public class AuthService : IAuthService
 
         var roles = await _userManager.GetRolesAsync(user);
         var token = GenerateJwtToken(user, roles);
+        var refreshToken = GenerateRefreshToken();
+
+        user.RefreshToken = refreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationInDays);
+        await _userManager.UpdateAsync(user);
 
         return new AuthResponse
         {
             Succeeded = true,
             Token = token,
-            Expiration = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
-            UserId = user.Id,
+            RefreshToken = refreshToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
             Email = user.Email,
             FullName = user.FullName,
-            Roles = roles
+            Role = roles.FirstOrDefault()
         };
     }
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
+        var nameParts = request.FullName.Trim().Split(' ', 2);
         var user = new ApplicationUser
         {
             UserName = request.Email,
             Email = request.Email,
-            FirstName = request.FirstName,
-            LastName = request.LastName
+            FirstName = nameParts[0],
+            LastName = nameParts.Length > 1 ? nameParts[1] : string.Empty
         };
 
         var result = await _userManager.CreateAsync(user, request.Password);
         if (!result.Succeeded)
             return new AuthResponse { Errors = result.Errors.Select(e => e.Description) };
 
-        await _userManager.AddToRoleAsync(user, "Staff");
+        var role = string.IsNullOrWhiteSpace(request.Role) ? "Staff" : request.Role;
+        await _userManager.AddToRoleAsync(user, role);
 
         var roles = await _userManager.GetRolesAsync(user);
         var token = GenerateJwtToken(user, roles);
+        var refreshToken = GenerateRefreshToken();
+
+        user.RefreshToken = refreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationInDays);
+        await _userManager.UpdateAsync(user);
 
         return new AuthResponse
         {
             Succeeded = true,
             Token = token,
-            Expiration = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
-            UserId = user.Id,
+            RefreshToken = refreshToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
             Email = user.Email,
             FullName = user.FullName,
-            Roles = roles
+            Role = roles.FirstOrDefault()
         };
+    }
+
+    public async Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request)
+    {
+        var principal = GetPrincipalFromExpiredToken(request.Token);
+        if (principal == null)
+            return new AuthResponse { Errors = ["Invalid token."] };
+
+        var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
+            return new AuthResponse { Errors = ["Invalid token."] };
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null || user.RefreshToken != request.RefreshToken ||
+            user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+            return new AuthResponse { Errors = ["Invalid or expired refresh token."] };
+
+        var roles = await _userManager.GetRolesAsync(user);
+        var newToken = GenerateJwtToken(user, roles);
+        var newRefreshToken = GenerateRefreshToken();
+
+        user.RefreshToken = newRefreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationInDays);
+        await _userManager.UpdateAsync(user);
+
+        return new AuthResponse
+        {
+            Succeeded = true,
+            Token = newToken,
+            RefreshToken = newRefreshToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
+            Email = user.Email,
+            FullName = user.FullName,
+            Role = roles.FirstOrDefault()
+        };
+    }
+
+    public Task<bool> ValidateTokenAsync(string token)
+    {
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.UTF8.GetBytes(_jwtSettings.Secret);
+
+        try
+        {
+            tokenHandler.ValidateToken(token, new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = _jwtSettings.Issuer,
+                ValidAudience = _jwtSettings.Audience,
+                IssuerSigningKey = new SymmetricSecurityKey(key)
+            }, out _);
+
+            return Task.FromResult(true);
+        }
+        catch
+        {
+            return Task.FromResult(false);
+        }
     }
 
     public async Task<UserInfo?> GetUserInfoAsync(string userId)
@@ -126,5 +203,36 @@ public class AuthService : IAuthService
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static string GenerateRefreshToken()
+    {
+        var randomNumber = new byte[64];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber);
+    }
+
+    private ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
+    {
+        var tokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = false,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = _jwtSettings.Issuer,
+            ValidAudience = _jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Secret))
+        };
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out var securityToken);
+
+        if (securityToken is not JwtSecurityToken jwtSecurityToken ||
+            !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+            return null;
+
+        return principal;
     }
 }

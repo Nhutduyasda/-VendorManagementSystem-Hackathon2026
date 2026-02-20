@@ -32,6 +32,7 @@ public class ProductDto
     public int MinStock { get; set; }
     public int MaxStock { get; set; }
     public int CurrentStock { get; set; }
+    public bool IsActive { get; set; }
     public int SupplierCount { get; set; }
 }
 
@@ -55,6 +56,7 @@ public class CreateProductRequest
     public int MinStock { get; set; }
     public int MaxStock { get; set; }
     public int CurrentStock { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 public class UpdateProductRequest : CreateProductRequest
@@ -70,6 +72,17 @@ public class SupplierProductDto
     public string ProductName { get; set; } = string.Empty;
     public decimal Price { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+public class ProductListResponse
+{
+    public IEnumerable<ProductDto> Items { get; set; } = [];
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+    public bool HasPreviousPage => Page > 1;
+    public bool HasNextPage => Page < TotalPages;
 }
 
 public class PriceListDto

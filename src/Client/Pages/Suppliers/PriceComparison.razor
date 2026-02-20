@@ -1,0 +1,134 @@
+@page "/price-comparison"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Price Comparison - VMS</PageTitle>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800">Price Comparison</h1>
+        <a href="/vendors" class="text-gray-500 hover:text-gray-700 text-sm">← Back to Suppliers</a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 flex flex-col md:flex-row gap-3">
+            <select @bind="selectedProductId" @bind:after="OnProductChanged"
+                    class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="0">All Products</option>
+                @foreach (var product in products)
+                {
+                    <option value="@product.Id">@product.Name (@product.SKU)</option>
+                }
+            </select>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="p-8 text-center text-gray-500">Loading price comparison...</div>
+        }
+        else if (comparisons.Any())
+        {
+            <div class="divide-y divide-gray-200">
+                @foreach (var item in comparisons)
+                {
+                    <div class="p-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <h3 class="font-semibold text-gray-800">@item.ProductName</h3>
+                            <span class="text-gray-400 text-sm font-mono">@item.SKU</span>
+                        </div>
+
+                        @if (item.SupplierPrices.Any())
+                        {
+                            <div class="overflow-x-auto">
+                                <table class="w-full">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last Updated</th>
+                                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        @foreach (var sp in item.SupplierPrices.OrderBy(x => x.Price))
+                                        {
+                                            <tr class="@(sp.IsCheapest ? "bg-green-50" : "hover:bg-gray-50")">
+                                                <td class="px-4 py-3 font-medium text-gray-900">
+                                                    <a href="/suppliers/@sp.SupplierId" class="text-blue-600 hover:text-blue-800">
+                                                        @sp.SupplierName
+                                                    </a>
+                                                </td>
+                                                <td class="px-4 py-3 @(sp.IsCheapest ? "text-green-700 font-bold" : "text-gray-600")">
+                                                    $@sp.Price.ToString("N2")
+                                                </td>
+                                                <td class="px-4 py-3 text-gray-500 text-sm">
+                                                    @sp.EffectiveDate.ToString("MMM dd, yyyy")
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    @if (sp.IsCheapest)
+                                                    {
+                                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                                            Best Price
+                                                        </span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            @if (item.SupplierPrices.Count > 1)
+                            {
+                                var min = item.SupplierPrices.Min(x => x.Price);
+                                var max = item.SupplierPrices.Max(x => x.Price);
+                                var savings = max - min;
+                                <div class="mt-2 px-4 py-2 bg-blue-50 rounded text-sm text-blue-700">
+                                    Price range: $@min.ToString("N2") – $@max.ToString("N2")
+                                    (potential savings: $@savings.ToString("N2"))
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-gray-500 text-sm">No supplier prices available.</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="p-8 text-center text-gray-500">No price data available for comparison.</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject] private ISupplierService SupplierService { get; set; } = default!;
+    [Inject] private IProductService ProductService { get; set; } = default!;
+
+    private List<PriceComparisonDto> comparisons = [];
+    private List<ProductDto> products = [];
+    private int selectedProductId;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var productList = await ProductService.GetProductsAsync(1, 500);
+        products = productList?.Items.ToList() ?? [];
+        await LoadComparison();
+    }
+
+    private async Task LoadComparison()
+    {
+        isLoading = true;
+        int? prodId = selectedProductId > 0 ? selectedProductId : null;
+        comparisons = await SupplierService.GetPriceComparisonAsync(prodId);
+        isLoading = false;
+    }
+
+    private async Task OnProductChanged()
+    {
+        await LoadComparison();
+    }
+}

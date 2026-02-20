@@ -7,12 +7,18 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using VendorManagementSystem.Server.Configuration;
-using VendorManagementSystem.Server.Data;
+
 using VendorManagementSystem.Server.Hubs;
+using VendorManagementSystem.Server.Repositories;
 using VendorManagementSystem.Server.Services;
+using VendorManagementSystem.Server.Data;
+using VendorManagementSystem.Shared.DTOs;
+
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
+
+OfficeOpenXml.ExcelPackage.License.SetNonCommercialOrganization("VendorManagementSystem");
 
 // ──────────────────────────────────────────────
 // Configuration binding
@@ -146,10 +152,16 @@ builder.Services.AddSingleton(_ =>
 // Application Services (DI)
 // ──────────────────────────────────────────────
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 builder.Services.AddScoped<ISupplierService, SupplierService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
-builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
+builder.Services.AddScoped<IPriceListRepository, PriceListRepository>();
 
 // ──────────────────────────────────────────────
 // Blazor WASM hosting

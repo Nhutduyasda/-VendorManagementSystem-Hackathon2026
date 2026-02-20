@@ -1,0 +1,62 @@
+<div class="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+    <div class="text-sm text-gray-600">
+        Showing @(((CurrentPage - 1) * PageSize) + 1)–@Math.Min(CurrentPage * PageSize, TotalCount) of @TotalCount
+    </div>
+
+    <div class="flex items-center gap-3">
+        <select value="@PageSize" @onchange="HandlePageSizeChange"
+                class="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="5">5 / page</option>
+            <option value="10">10 / page</option>
+            <option value="25">25 / page</option>
+            <option value="50">50 / page</option>
+        </select>
+
+        <div class="flex items-center gap-1">
+            <button @onclick="() => GoToPage(CurrentPage - 1)"
+                    disabled="@(CurrentPage <= 1)"
+                    class="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                Previous
+            </button>
+
+            @for (var i = startPage; i <= endPage; i++)
+            {
+                var pageNum = i;
+                <button @onclick="() => GoToPage(pageNum)"
+                        class="@(pageNum == CurrentPage ? "px-3 py-1 text-sm border border-blue-500 bg-blue-50 text-blue-700 rounded-md font-medium" : "px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50")">
+                    @pageNum
+                </button>
+            }
+
+            <button @onclick="() => GoToPage(CurrentPage + 1)"
+                    disabled="@(CurrentPage >= TotalPages)"
+                    class="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                Next
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int CurrentPage { get; set; } = 1;
+    [Parameter] public int TotalPages { get; set; } = 1;
+    [Parameter] public int PageSize { get; set; } = 10;
+    [Parameter] public int TotalCount { get; set; }
+    [Parameter] public EventCallback<int> OnPageChanged { get; set; }
+    [Parameter] public EventCallback<int> OnPageSizeChanged { get; set; }
+
+    private int startPage => Math.Max(1, CurrentPage - 2);
+    private int endPage => Math.Min(TotalPages, startPage + 4);
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= TotalPages && page != CurrentPage)
+            await OnPageChanged.InvokeAsync(page);
+    }
+
+    private async Task HandlePageSizeChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size))
+            await OnPageSizeChanged.InvokeAsync(size);
+    }
+}

@@ -17,6 +17,11 @@ builder.Services.AddScoped(sp => new HttpClient
 // Auth state provider
 builder.Services.AddScoped<AuthenticationStateProvider, JwtAuthStateProvider>();
 builder.Services.AddScoped<IAuthClientService, AuthClientService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<ISupplierService, SupplierService>();
+builder.Services.AddScoped<IVendorService, VendorService>();
 
 builder.Services.AddAuthorizationCore();
 

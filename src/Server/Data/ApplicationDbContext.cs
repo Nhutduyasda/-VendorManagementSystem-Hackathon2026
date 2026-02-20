@@ -233,5 +233,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(a => a.Timestamp);
             e.HasIndex(a => new { a.EntityType, a.EntityId });
         });
+
+        builder.Entity<ApplicationUser>(e =>
+        {
+            e.HasOne(u => u.Supplier)
+                .WithMany()
+                .HasForeignKey(u => u.SupplierId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasIndex(u => u.SupplierId);
+        });
     }
 }

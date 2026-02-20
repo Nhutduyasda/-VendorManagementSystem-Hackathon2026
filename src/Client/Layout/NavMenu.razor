@@ -10,7 +10,25 @@
             <NavLink href="vendors"
                      class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
                      ActiveClass="bg-gray-700 text-white">
-                Vendors
+                Suppliers
+            </NavLink>
+
+            <NavLink href="price-comparison"
+                     class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+                     ActiveClass="bg-gray-700 text-white">
+                Price Compare
+            </NavLink>
+
+            <NavLink href="categories"
+                     class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+                     ActiveClass="bg-gray-700 text-white">
+                Categories
+            </NavLink>
+
+            <NavLink href="products"
+                     class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+                     ActiveClass="bg-gray-700 text-white">
+                Products
             </NavLink>
 
             <NavLink href="contracts"
@@ -24,6 +42,16 @@
                      ActiveClass="bg-gray-700 text-white">
                 Notifications
             </NavLink>
+
+            <AuthorizeView Roles="Admin">
+                <Authorized Context="adminContext">
+                    <NavLink href="users"
+                             class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
+                             ActiveClass="bg-gray-700 text-white">
+                        Users
+                    </NavLink>
+                </Authorized>
+            </AuthorizeView>
 
             <button @onclick="Logout"
                     class="w-full text-left flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white mt-4 border-t border-gray-700 pt-4">

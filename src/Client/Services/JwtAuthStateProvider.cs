@@ -9,7 +9,7 @@ public class JwtAuthStateProvider : AuthenticationStateProvider
 {
     private readonly IJSRuntime _js;
     private readonly HttpClient _http;
-    private const string TokenKey = "auth_token";
+    private const string TokenKey = "authToken";
 
     public JwtAuthStateProvider(IJSRuntime js, HttpClient http)
     {
@@ -24,22 +24,16 @@ public class JwtAuthStateProvider : AuthenticationStateProvider
         if (string.IsNullOrWhiteSpace(token))
             return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
 
-        var claims = ParseClaimsFromJwt(token);
-        var expiry = claims.FirstOrDefault(c => c.Type == "exp")?.Value;
-
-        if (expiry != null)
+        if (IsTokenExpired(token))
         {
-            var expiryDate = DateTimeOffset.FromUnixTimeSeconds(long.Parse(expiry));
-            if (expiryDate <= DateTimeOffset.UtcNow)
-            {
-                await _js.InvokeVoidAsync("localStorage.removeItem", TokenKey);
-                return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
-            }
+            await _js.InvokeVoidAsync("localStorage.removeItem", TokenKey);
+            return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
         }
 
         _http.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
+        var claims = ParseClaimsFromJwt(token);
         var identity = new ClaimsIdentity(claims, "jwt");
         var user = new ClaimsPrincipal(identity);
 
@@ -59,6 +53,20 @@ public class JwtAuthStateProvider : AuthenticationStateProvider
     {
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
         NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(anonymous)));
+    }
+
+    public static bool IsTokenExpired(string jwt)
+    {
+        try
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var token = handler.ReadJwtToken(jwt);
+            return token.ValidTo <= DateTime.UtcNow;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static IEnumerable<Claim> ParseClaimsFromJwt(string jwt)

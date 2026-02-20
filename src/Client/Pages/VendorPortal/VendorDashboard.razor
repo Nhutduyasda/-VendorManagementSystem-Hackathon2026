@@ -1,0 +1,124 @@
+@page "/vendor/dashboard"
+@using VendorManagementSystem.Shared.DTOs
+@using VendorManagementSystem.Client.Services
+@using VendorManagementSystem.Shared.DTOs.PurchaseOrders
+@using VendorManagementSystem.Shared.DTOs.Vendors
+@inject IVendorService VendorService
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Vendor")]
+
+<PageTitle>Vendor Dashboard - VMS</PageTitle>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800">Vendor Dashboard</h1>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="p-8 text-center text-gray-500">Loading dashboard...</div>
+    }
+    else if (!isLinked)
+    {
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+            <strong>Error:</strong> Your account is not linked to a supplier. Contact admin.
+        </div>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-gray-500 text-sm font-medium uppercase">Total Orders</div>
+                <div class="mt-2 text-3xl font-bold text-gray-900">@dashboard?.TotalPurchaseOrders</div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-gray-500 text-sm font-medium uppercase">Total Revenue</div>
+                <div class="mt-2 text-3xl font-bold text-green-600">@dashboard?.TotalRevenue.ToString("C")</div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-gray-500 text-sm font-medium uppercase">Average Rating</div>
+                <div class="mt-2 text-3xl font-bold text-blue-600">@dashboard?.AverageRating</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-800">My Purchase Orders</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PO Number</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        @foreach (var po in purchaseOrders)
+                        {
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium text-gray-900">@po.PONumber</td>
+                                <td class="px-6 py-4 text-gray-500">@po.CreatedAt.ToString("MMM dd, yyyy")</td>
+                                <td class="px-6 py-4 font-medium">@po.TotalAmount.ToString("C")</td>
+                                <td class="px-6 py-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full @GetStatusColor(po.Status.ToString())">
+                                        @po.Status
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 text-gray-500">@po.Items.Count</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private VendorDashboardDto? dashboard;
+    private List<PurchaseOrderDto> purchaseOrders = new();
+    private bool isLoading = true;
+    private bool isLinked = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try 
+        {
+            var supplier = await VendorService.GetMySupplierInfoAsync();
+            if (supplier != null)
+            {
+                isLinked = true;
+                dashboard = await VendorService.GetDashboardAsync();
+                purchaseOrders = await VendorService.GetPurchaseOrdersAsync();
+            }
+            else
+            {
+                isLinked = false;
+            }
+        }
+        catch
+        {
+            isLinked = false;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private string GetStatusColor(string status) => status switch
+    {
+        "Draft" => "bg-gray-100 text-gray-800",
+        "PendingApproval" => "bg-yellow-100 text-yellow-800",
+        "Approved" => "bg-blue-100 text-blue-800",
+        "Ordered" => "bg-indigo-100 text-indigo-800",
+        "Received" => "bg-green-100 text-green-800",
+        "Cancelled" => "bg-red-100 text-red-800",
+        _ => "bg-gray-100 text-gray-800"
+    };
+}

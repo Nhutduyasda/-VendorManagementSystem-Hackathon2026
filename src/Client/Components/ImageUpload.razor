@@ -1,0 +1,127 @@
+@using Microsoft.AspNetCore.Components.Forms
+
+<div class="space-y-2">
+    <label class="block text-sm font-medium text-gray-700">Product Image</label>
+
+    @if (!string.IsNullOrEmpty(previewUrl))
+    {
+        <div class="relative w-32 h-32">
+            <img src="@previewUrl" alt="Product image" class="w-32 h-32 rounded-lg object-cover border border-gray-300" />
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(CurrentImageUrl))
+    {
+        <div class="relative w-32 h-32">
+            <img src="@CurrentImageUrl" alt="Current image" class="w-32 h-32 rounded-lg object-cover border border-gray-300" />
+        </div>
+    }
+
+    <div class="flex items-center gap-3">
+        <InputFile OnChange="HandleFileSelected" accept="image/*"
+                   class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+
+        @if (selectedFile != null && !isUploading)
+        {
+            <button type="button" @onclick="UploadImage"
+                    class="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                Upload
+            </button>
+        }
+
+        @if (isUploading)
+        {
+            <span class="text-sm text-gray-500">Uploading...</span>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(uploadError))
+    {
+        <p class="text-red-500 text-xs">@uploadError</p>
+    }
+
+    @if (uploadSuccess)
+    {
+        <p class="text-green-600 text-xs">Image uploaded successfully!</p>
+    }
+</div>
+
+@code {
+    [Parameter] public int ProductId { get; set; }
+    [Parameter] public string? CurrentImageUrl { get; set; }
+    [Parameter] public EventCallback<string> OnImageUploaded { get; set; }
+
+    [Inject] private IProductService ProductService { get; set; } = default!;
+
+    private IBrowserFile? selectedFile;
+    private string? previewUrl;
+    private bool isUploading;
+    private string? uploadError;
+    private bool uploadSuccess;
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        uploadError = null;
+        uploadSuccess = false;
+
+        if (selectedFile != null)
+        {
+            var maxSize = 5 * 1024 * 1024;
+            if (selectedFile.Size > maxSize)
+            {
+                uploadError = "File size must be less than 5MB.";
+                selectedFile = null;
+                return;
+            }
+
+            try
+            {
+                var resizedFile = await selectedFile.RequestImageFileAsync("image/png", 800, 800);
+                using var stream = resizedFile.OpenReadStream(maxSize);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                previewUrl = $"data:{selectedFile.ContentType};base64,{base64}";
+            }
+            catch
+            {
+                previewUrl = null;
+            }
+        }
+    }
+
+    private async Task UploadImage()
+    {
+        if (selectedFile == null || ProductId <= 0) return;
+
+        isUploading = true;
+        uploadError = null;
+        uploadSuccess = false;
+
+        try
+        {
+            var maxSize = 5 * 1024 * 1024;
+            using var stream = selectedFile.OpenReadStream(maxSize);
+            var result = await ProductService.UploadImageAsync(ProductId, stream, selectedFile.Name, selectedFile.ContentType);
+
+            if (result?.Success == true && result.Data != null)
+            {
+                previewUrl = result.Data;
+                uploadSuccess = true;
+                await OnImageUploaded.InvokeAsync(result.Data);
+            }
+            else
+            {
+                uploadError = result?.Message ?? "Upload failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            uploadError = ex.Message;
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+}

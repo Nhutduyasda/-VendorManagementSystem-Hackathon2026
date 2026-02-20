@@ -1,0 +1,277 @@
+@page "/suppliers/{Id:int}"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Supplier Details - VMS</PageTitle>
+
+@if (isLoading)
+{
+    <div class="p-8 text-center text-gray-500">Loading supplier details...</div>
+}
+else if (overview == null)
+{
+    <div class="p-8 text-center text-gray-500">Supplier not found.</div>
+}
+else
+{
+    var supplier = overview.Supplier;
+    var stats = overview.Stats;
+
+    <div class="space-y-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <a href="/vendors" class="text-gray-500 hover:text-gray-700">← Back</a>
+                <div class="flex items-center gap-3">
+                    @if (!string.IsNullOrEmpty(supplier.LogoUrl))
+                    {
+                        <img src="@supplier.LogoUrl" alt="@supplier.Name" class="w-14 h-14 rounded-full object-cover border-2 border-gray-200" />
+                    }
+                    else
+                    {
+                        <div class="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xl">
+                            @supplier.Name[0]
+                        </div>
+                    }
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-800">@supplier.Name</h1>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="px-2 py-0.5 text-xs font-medium rounded-full @GetStatusColor(supplier.Status)">@supplier.Status</span>
+                            <span class="px-2 py-0.5 text-xs font-medium rounded-full @GetRankColor(supplier.Rank)">@supplier.Rank</span>
+                            @if (supplier.IsBlacklisted)
+                            {
+                                <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-800">Blacklisted</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <AuthorizeView Roles="Admin,Manager" Context="detailHeaderCtx">
+                <div class="flex gap-2">
+                    <label class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium text-sm cursor-pointer">
+                        Upload Logo
+                        <InputFile OnChange="HandleLogoUpload" accept="image/*" class="hidden" />
+                    </label>
+                </div>
+            </AuthorizeView>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-500">Total Orders</div>
+                <div class="text-2xl font-bold text-gray-800 mt-1">@stats.TotalOrders</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-500">Total Spent</div>
+                <div class="text-2xl font-bold text-gray-800 mt-1">$@stats.TotalSpent.ToString("N2")</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-500">Active Contracts</div>
+                <div class="text-2xl font-bold text-gray-800 mt-1">@stats.ActiveContracts</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-500">Average Rating</div>
+                <div class="text-2xl font-bold text-amber-500 mt-1">
+                    @(supplier.AverageRating?.ToString("F1") ?? "—") ★
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-800">Contact Information</h2>
+                </div>
+                <div class="p-4 space-y-3">
+                    <div class="flex justify-between"><span class="text-gray-500 text-sm">Email</span><span class="text-gray-900 text-sm font-medium">@supplier.Email</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500 text-sm">Phone</span><span class="text-gray-900 text-sm font-medium">@(supplier.Phone ?? "—")</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500 text-sm">Address</span><span class="text-gray-900 text-sm font-medium">@(supplier.Address ?? "—")</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500 text-sm">Contact Person</span><span class="text-gray-900 text-sm font-medium">@(supplier.ContactPerson ?? "—")</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500 text-sm">Tax Code</span><span class="text-gray-900 text-sm font-medium">@(supplier.TaxCode ?? "—")</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500 text-sm">Created</span><span class="text-gray-900 text-sm font-medium">@supplier.CreatedAt.ToString("MMM dd, yyyy")</span></div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-800">Performance Scores</h2>
+                </div>
+                <div class="p-4 space-y-4">
+                    @foreach (var (label, score) in new[] { ("Quality", stats.AverageQualityScore), ("Price", stats.AveragePriceScore), ("Delivery", stats.AverageDeliveryScore) })
+                    {
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="text-gray-600">@label</span>
+                                <span class="font-medium text-gray-800">@score.ToString("F1") / 5.0</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="@GetScoreBarColor(score) h-2 rounded-full" style="width: @GetScorePercent(score)%"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow">
+            <div class="p-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-800">Linked Products (@overview.Products.Count)</h2>
+            </div>
+            @if (overview.Products.Any())
+            {
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            @foreach (var p in overview.Products)
+                            {
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-900">@p.ProductName</td>
+                                    <td class="px-6 py-4 text-gray-600">$@p.Price.ToString("N2")</td>
+                                    <td class="px-6 py-4 text-gray-500 text-sm">@p.UpdatedAt.ToString("MMM dd, yyyy")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="p-6 text-center text-gray-500">No products linked yet.</div>
+            }
+        </div>
+
+        <div class="bg-white rounded-lg shadow">
+            <div class="p-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-800">Price History</h2>
+            </div>
+            @if (overview.PriceHistory.Any())
+            {
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Effective Date</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            @foreach (var ph in overview.PriceHistory)
+                            {
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 text-gray-600">@ph.ProductId</td>
+                                    <td class="px-6 py-4 text-gray-600">$@ph.Price.ToString("N2")</td>
+                                    <td class="px-6 py-4 text-gray-500 text-sm">@ph.EffectiveDate.ToString("MMM dd, yyyy HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="p-6 text-center text-gray-500">No price history available.</div>
+            }
+        </div>
+
+        @if (overview.Ratings.Any())
+        {
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-lg font-semibold text-gray-800">Ratings & Reviews</h2>
+                </div>
+                <div class="divide-y divide-gray-200">
+                    @foreach (var rating in overview.Ratings)
+                    {
+                        <div class="p-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-amber-500 font-bold">@rating.OverallRating.ToString("F1") ★</span>
+                                    <span class="text-gray-400 text-sm">PO #@rating.PurchaseOrderId</span>
+                                </div>
+                                <span class="text-gray-400 text-sm">@rating.CreatedAt.ToString("MMM dd, yyyy")</span>
+                            </div>
+                            <div class="flex gap-4 mt-2 text-sm text-gray-500">
+                                <span>Quality: @rating.QualityScore.ToString("F1")</span>
+                                <span>Price: @rating.PriceScore.ToString("F1")</span>
+                                <span>Delivery: @rating.DeliveryScore.ToString("F1")</span>
+                            </div>
+                            @if (!string.IsNullOrEmpty(rating.Comment))
+                            {
+                                <p class="mt-2 text-gray-700 text-sm">@rating.Comment</p>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (supplier.IsBlacklisted && !string.IsNullOrEmpty(supplier.BlacklistReason))
+        {
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <h3 class="text-red-800 font-semibold">Blacklist Reason</h3>
+                <p class="text-red-700 mt-1">@supplier.BlacklistReason</p>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Inject] private ISupplierService SupplierService { get; set; } = default!;
+
+    private SupplierOverviewDto? overview;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOverview();
+    }
+
+    private async Task LoadOverview()
+    {
+        isLoading = true;
+        overview = await SupplierService.GetOverviewAsync(Id);
+        isLoading = false;
+    }
+
+    private async Task HandleLogoUpload(InputFileChangeEventArgs e)
+    {
+        var maxSize = 5 * 1024 * 1024;
+        if (e.File.Size > maxSize) return;
+
+        using var stream = e.File.OpenReadStream(maxSize);
+        var result = await SupplierService.UploadLogoAsync(Id, stream, e.File.Name, e.File.ContentType);
+        if (result?.Success == true)
+            await LoadOverview();
+    }
+
+    private static string GetStatusColor(SupplierStatus status) => status switch
+    {
+        SupplierStatus.Active => "bg-green-100 text-green-800",
+        SupplierStatus.Approved => "bg-blue-100 text-blue-800",
+        SupplierStatus.Pending => "bg-yellow-100 text-yellow-800",
+        SupplierStatus.Suspended => "bg-red-100 text-red-800",
+        SupplierStatus.Inactive => "bg-gray-100 text-gray-800",
+        _ => "bg-gray-100 text-gray-600"
+    };
+
+    private static string GetRankColor(SupplierRank rank) => rank switch
+    {
+        SupplierRank.Platinum => "bg-purple-100 text-purple-800",
+        SupplierRank.Gold => "bg-yellow-100 text-yellow-800",
+        SupplierRank.Silver => "bg-gray-200 text-gray-700",
+        SupplierRank.Bronze => "bg-orange-100 text-orange-800",
+        _ => "bg-gray-100 text-gray-500"
+    };
+
+    private static string GetScoreBarColor(double score) =>
+        score >= 4 ? "bg-green-500" : score >= 3 ? "bg-yellow-500" : score >= 2 ? "bg-orange-500" : "bg-red-500";
+
+    private static double GetScorePercent(double score) => Math.Min(score / 5.0 * 100, 100);
+}

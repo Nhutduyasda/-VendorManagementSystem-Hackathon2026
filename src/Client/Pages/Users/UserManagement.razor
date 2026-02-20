@@ -1,0 +1,269 @@
+@page "/users"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using VendorManagementSystem.Shared.DTOs.Users
+
+<PageTitle>User Management - VMS</PageTitle>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800">User Management</h1>
+        <button @onclick="OpenCreateForm"
+                class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium text-sm">
+            + Add User
+        </button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 flex flex-col md:flex-row gap-3">
+            <input type="text" @bind="searchTerm" @bind:event="oninput" @onkeyup="OnSearchChanged"
+                   placeholder="Search users..."
+                   class="w-full md:w-80 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+            <select @bind="roleFilter" @bind:after="OnRoleFilterChanged"
+                    class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">All Roles</option>
+                <option value="Admin">Admin</option>
+                <option value="Manager">Manager</option>
+                <option value="Staff">Staff</option>
+                <option value="Vendor">Vendor</option>
+            </select>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="p-8 text-center text-gray-500">Loading users...</div>
+        }
+        else if (users?.Items.Any() == true)
+        {
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Full Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>   
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        @foreach (var user in users.Items)
+                        {
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 text-gray-900">@user.Email</td>
+                                <td class="px-6 py-4 text-gray-900 font-medium">@user.FullName</td>
+                                <td class="px-6 py-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full @GetRoleBadgeColor(user.Role)">
+                                        @user.Role
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 text-gray-900">
+                                    @(user.SupplierName ?? "-")
+                                </td>
+                                <td class="px-6 py-4">
+                                    <button @onclick="() => ToggleStatus(user)"
+                                            class="px-2 py-1 text-xs font-medium rounded-full cursor-pointer @(user.IsActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800")">
+                                        @(user.IsActive ? "Active" : "Inactive")
+                                    </button>
+                                </td>
+                                <td class="px-6 py-4 text-gray-500 text-sm">@user.CreatedAt.ToString("MMM dd, yyyy")</td>
+                                <td class="px-6 py-4">
+                                    <div class="flex gap-2">
+                                        <button @onclick="() => OpenEditForm(user)"
+                                                class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                            Edit
+                                        </button>
+                                        <button @onclick="() => DeleteUser(user)"
+                                                class="text-red-600 hover:text-red-800 text-sm font-medium">
+                                            Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <Pagination
+                CurrentPage="currentPage"
+                TotalPages="users.TotalPages"
+                PageSize="pageSize"
+                TotalCount="users.TotalCount"
+                OnPageChanged="OnPageChanged"
+                OnPageSizeChanged="OnPageSizeChanged" />
+        }
+        else
+        {
+            <div class="p-8 text-center text-gray-500">No users found.</div>
+        }
+    </div>
+</div>
+
+@if (showForm)
+{
+    <UserForm IsEdit="isEditing"
+              User="formModel"
+              OnSave="HandleSave"
+              OnCancel="CloseForm"
+              ErrorMessage="@formError" />
+}
+
+@code {
+    [Inject] private IUserService UserService { get; set; } = default!;
+
+    private UserListResponse? users;
+    private bool isLoading = true;
+    private string searchTerm = string.Empty;
+    private string roleFilter = string.Empty;
+    private int currentPage = 1;
+    private int pageSize = 10;
+
+    private bool showForm;
+    private bool isEditing;
+    private string? editingUserId;
+    private CreateUserRequest formModel = new();
+    private string? formError;
+
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        isLoading = true;
+        users = await UserService.GetUsersAsync(currentPage, pageSize, searchTerm, roleFilter);
+        isLoading = false;
+    }
+
+    private void OnSearchChanged()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer?.Stop();
+            currentPage = 1;
+            await InvokeAsync(async () =>
+            {
+                await LoadUsers();
+                StateHasChanged();
+            });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private async Task OnRoleFilterChanged()
+    {
+        currentPage = 1;
+        await LoadUsers();
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        currentPage = page;
+        await LoadUsers();
+    }
+
+    private async Task OnPageSizeChanged(int size)
+    {
+        pageSize = size;
+        currentPage = 1;
+        await LoadUsers();
+    }
+
+    private void OpenCreateForm()
+    {
+        isEditing = false;
+        editingUserId = null;
+        formModel = new CreateUserRequest { Role = "Staff" };
+        formError = null;
+        showForm = true;
+    }
+
+    private void OpenEditForm(UserDto user)
+    {
+        isEditing = true;
+        editingUserId = user.Id;
+        formModel = new CreateUserRequest
+        {
+            Email = user.Email,
+            FullName = user.FullName,
+            Role = user.Role,
+            Password = "placeholder",
+            SupplierId = user.SupplierId
+        };
+        formError = null;
+        showForm = true;
+    }
+
+    private async Task HandleSave(CreateUserRequest model)
+    {
+        formError = null;
+
+        if (isEditing && editingUserId != null)
+        {
+            var updateRequest = new UpdateUserRequest
+            {
+                Email = model.Email,
+                FullName = model.FullName,
+                Role = model.Role,
+                IsActive = true,
+                SupplierId = model.SupplierId
+            };
+
+            var result = await UserService.UpdateUserAsync(editingUserId, updateRequest);
+            if (result?.Success != true)
+            {
+                formError = result?.Message ?? "Failed to update user";
+                return;
+            }
+        }
+        else
+        {
+            var result = await UserService.CreateUserAsync(model);
+            if (result?.Success != true)
+            {
+                formError = result?.Message ?? "Failed to create user";
+                return;
+            }
+        }
+
+        showForm = false;
+        await LoadUsers();
+    }
+
+    private void CloseForm()
+    {
+        showForm = false;
+        formError = null;
+    }
+
+    private async Task ToggleStatus(UserDto user)
+    {
+        await UserService.ToggleUserStatusAsync(user.Id);
+        await LoadUsers();
+    }
+
+    private async Task DeleteUser(UserDto user)
+    {
+        await UserService.DeleteUserAsync(user.Id);
+        await LoadUsers();
+    }
+
+    private string GetRoleBadgeColor(string role) => role switch
+    {
+        "Admin" => "bg-purple-100 text-purple-800",
+        "Manager" => "bg-blue-100 text-blue-800",
+        "Staff" => "bg-gray-100 text-gray-800",
+        "Vendor" => "bg-yellow-100 text-yellow-800",
+        _ => "bg-gray-100 text-gray-800"
+    };
+}

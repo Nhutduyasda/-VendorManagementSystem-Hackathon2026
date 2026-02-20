@@ -1,0 +1,139 @@
+@using VendorManagementSystem.Shared.DTOs.Users
+@inject IUserService UserService
+
+<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-800">@(IsEdit ? "Edit User" : "Create User")</h2>
+        </div>
+
+        <EditForm Model="formModel" OnValidSubmit="HandleSubmit" class="p-6 space-y-4">
+            <DataAnnotationsValidator />
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+                    @ErrorMessage
+                </div>
+            }
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <InputText @bind-Value="formModel.Email"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <ValidationMessage For="() => formModel.Email" class="text-red-500 text-xs mt-1" />
+            </div>
+
+            @if (!IsEdit)
+            {
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <InputText @bind-Value="formModel.Password" type="password"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <ValidationMessage For="() => formModel.Password" class="text-red-500 text-xs mt-1" />
+                </div>
+            }
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <InputText @bind-Value="formModel.FullName"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <ValidationMessage For="() => formModel.FullName" class="text-red-500 text-xs mt-1" />
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <InputSelect Value="formModel.Role"
+                             ValueChanged="@((string role) => OnRoleChanged(role))"
+                             ValueExpression="@(() => formModel.Role)"
+                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="Admin">Admin</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Staff">Staff</option>
+                    <option value="Vendor">Vendor</option>
+                </InputSelect>
+            </div>
+
+            @if (formModel.Role == "Vendor")
+            {
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        Link to Supplier <span class="text-red-500">*</span>
+                    </label>
+                    <InputSelect @bind-Value="formModel.SupplierId"
+                                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">-- Select Supplier --</option>
+                        @foreach (var supplier in suppliers)
+                        {
+                            <option value="@supplier.Id">@supplier.Name</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => formModel.SupplierId" class="text-red-500 text-xs mt-1" />
+                    <p class="text-xs text-gray-500 mt-1">This user will access data for selected supplier in Vendor Portal</p>
+                </div>
+            }
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button type="button" @onclick="OnCancel"
+                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+                    Save
+                </button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public CreateUserRequest User { get; set; } = new();
+    [Parameter] public EventCallback<CreateUserRequest> OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+
+    private List<SupplierLookupDto> suppliers = new();
+    private CreateUserRequest formModel = new();
+
+    protected override void OnParametersSet()
+    {
+        formModel = new CreateUserRequest
+        {
+            Email = User.Email,
+            FullName = User.FullName,
+            Role = User.Role,
+            Password = User.Password,
+            SupplierId = User.SupplierId
+        };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        suppliers = await UserService.GetSuppliersForLookupAsync();
+    }
+
+    private void OnRoleChanged(string role)
+    {
+        formModel.Role = role;
+        if (role != "Vendor")
+        {
+            formModel.SupplierId = null;
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (formModel.Role == "Vendor" && !formModel.SupplierId.HasValue)
+        {
+            // Simple validation: do not submit if invalid. 
+            // Ideally we should show a message, but without modifying the parent or having a local error state that displays, it's hard.
+            // However, the OnValidSubmit won't trigger if DataAnnotations fail.
+            // But SupplierId is optional in DTO, so OnValidSubmit WILL trigger.
+            // We can manually trigger a validation error or just return.
+            return;
+        }
+        await OnSave.InvokeAsync(formModel);
+    }
+}

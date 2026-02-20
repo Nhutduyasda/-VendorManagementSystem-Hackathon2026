@@ -1,0 +1,143 @@
+@using Microsoft.AspNetCore.Components.Forms
+
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-800">
+                @(IsEdit ? "Edit Supplier" : "Add Supplier")
+            </h2>
+        </div>
+
+        <EditForm Model="Supplier" OnValidSubmit="HandleSubmit" class="p-6 space-y-4">
+            <DataAnnotationsValidator />
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="p-3 bg-red-100 text-red-700 rounded-md text-sm">@ErrorMessage</div>
+            }
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <InputText @bind-Value="Supplier.Name"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <ValidationMessage For="() => Supplier.Name" class="text-red-500 text-xs mt-1" />
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <InputText @bind-Value="Supplier.Email"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <ValidationMessage For="() => Supplier.Email" class="text-red-500 text-xs mt-1" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tax Code</label>
+                    <InputText @bind-Value="Supplier.TaxCode"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <InputText @bind-Value="Supplier.Phone"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <InputText @bind-Value="Supplier.Address"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                <InputText @bind-Value="Supplier.ContactPerson"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div>
+                 <VendorManagementSystem.Client.Components.ImageUploader 
+                    Label="Company Logo"
+                    CurrentImageUrl="@currentLogoUrl" 
+                    UploadAction="HandleImageUploadAction"
+                    OnImageUploaded="HandleImageUploaded"
+                    OnFileSelected="HandleFileSelected"
+                    ShowUploadButton="@IsEdit" />
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button type="button" @onclick="OnCancel"
+                        class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+                    @(IsEdit ? "Update" : "Create")
+                </button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public CreateSupplierRequest Supplier { get; set; } = new();
+    [Parameter] public EventCallback<CreateSupplierRequest> OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+
+    [Inject] private ISupplierService SupplierService { get; set; } = default!;
+
+    private string? currentLogoUrl;
+    private IBrowserFile? _pendingUploadFile;
+
+    protected override void OnParametersSet()
+    {
+        currentLogoUrl = Supplier.LogoUrl;
+    }
+
+    public void SetEditContext(string? logoUrl)
+    {
+        currentLogoUrl = logoUrl;
+    }
+
+    private async Task HandleSubmit()
+    {
+        await OnSave.InvokeAsync(Supplier);
+    }
+
+    private async Task<string> HandleImageUploadAction(IBrowserFile file)
+    {
+        if (IsEdit)
+        {
+            // We need the ID. Supplier request model doesn't have ID usually?
+            // But if IsEdit is true, we assume we can get ID?
+            // SupplierForm receives CreateSupplierRequest which doesn't have ID.
+            // But the Parent "Edit" mode likely has the ID.
+            // I need to add a Parameter for SupplierId to this Form!
+            
+            // Wait, CreateSupplierRequest doesn't have ID. 
+            // I should check if I can add [Parameter] public int SupplierId {get;set;}
+            
+            if (SupplierId > 0)
+            {
+                 return await SupplierService.UploadSupplierLogoAsync(SupplierId, file);
+            }
+        }
+        return string.Empty;
+    }
+
+    private void HandleImageUploaded(string url)
+    {
+        currentLogoUrl = url;
+        Supplier.LogoUrl = url;
+    }
+
+    private void HandleFileSelected(IBrowserFile file)
+    {
+        _pendingUploadFile = file;
+    }
+
+    [Parameter] public int SupplierId { get; set; }
+    public IBrowserFile? PendingUploadFile => _pendingUploadFile;
+}

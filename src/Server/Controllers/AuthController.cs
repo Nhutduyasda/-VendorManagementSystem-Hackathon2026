@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VendorManagementSystem.Server.Services;
 using VendorManagementSystem.Shared.DTOs;
@@ -33,8 +34,25 @@ public class AuthController : ControllerBase
         return Ok(ApiResponse<AuthResponse>.Ok(result));
     }
 
+    [HttpPost("refresh-token")]
+    public async Task<ActionResult<ApiResponse<AuthResponse>>> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        var result = await _authService.RefreshTokenAsync(request);
+        if (!result.Succeeded)
+            return BadRequest(ApiResponse<AuthResponse>.Fail("Token refresh failed", result.Errors));
+
+        return Ok(ApiResponse<AuthResponse>.Ok(result));
+    }
+
+    [HttpPost("logout")]
+    [Authorize]
+    public IActionResult Logout()
+    {
+        return Ok(ApiResponse<string>.Ok("Logged out successfully"));
+    }
+
     [HttpGet("user-info")]
-    [Microsoft.AspNetCore.Authorization.Authorize]
+    [Authorize]
     public async Task<ActionResult<ApiResponse<UserInfo>>> GetUserInfo()
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
